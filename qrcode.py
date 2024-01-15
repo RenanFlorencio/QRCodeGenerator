@@ -1,3 +1,5 @@
+import numpy as np
+
 # Hashmaps
 ALPHANUMERIC_TABLE = {
     '0': 0,
@@ -119,7 +121,22 @@ TOTALBITS_TABLE = {
     '3-M': 352
 }
 
-# Talvez criar uma classe string que contém as funções de acordo com a versão do QR code que está sendo usado
+def GF(number):
+    # Calculates the Galois Field 256 of a number modulo 100011101 (285)
+    # A hash map could be used here, but I wanted to code it
+
+    if number < 2 ** 8:
+        return number
+
+    if number == 2 ** 8:
+        return number ^ 285
+
+    aux = GF(number >> 1) * 2
+    if aux >= 256:
+        return aux ^ 285
+    
+    return aux
+
 class QRCode():
     def __init__(self, data, mode, version, ec_level):
         self.id = f'{version}-{ec_level}'
@@ -215,19 +232,24 @@ class QRCode():
             counter = 0
             for _ in range(self.datacodeG1):
                 new_s = ''
-                for i in range(8):
+                for i in range(8): # Each codeword has exactly 8 bits
                     new_s +=  self.string[counter + i]
                 
                 counter += 8
                 self.g1.append(new_s)
 
+    
+    
+print(GF(2**12))
+for i in range(9, 20):
+    print(f'2 ^ {i}: {GF(2**i)}')
 
-qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
+# qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 
-## ENCODING THE RAW DATA
-qr.set_mode()
-qr.character_count()
-qr.alpha_conversion()
-qr.terminator()
-qr.padding()
-qr.data_codewords()
+# ## ENCODING THE RAW DATA
+# qr.set_mode()
+# qr.character_count()
+# qr.alpha_conversion()
+# qr.terminator()
+# qr.padding()
+# qr.data_codewords()
