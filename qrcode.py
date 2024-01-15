@@ -121,9 +121,64 @@ TOTALBITS_TABLE = {
     '3-M': 352
 }
 
+ANTI_GF = {
+    1: 0,
+    2: 1,
+    3: 25,
+    4: 2,
+    5: 50,
+    6: 26,
+    7: 198,
+    8: 3,
+    9: 223,
+    10: 51,
+    11: 238,
+    12: 27,
+    13: 104,
+    14: 199,
+    15: 75,
+    16: 4,
+    17: 100,
+    18: 224,
+    19: 14,
+    20: 52,
+    21: 141,
+    22: 239,
+    23: 129,
+    24: 28,
+    25: 193,
+    26: 105,
+    27: 248,
+    28: 200,
+    29: 8,
+    30: 76,
+    31: 113,
+    32: 5,
+    33: 138,
+    34: 101,
+    35: 47,
+    36: 225,
+    37: 36,
+    38: 15,
+    39: 33,
+    40: 53,
+    41: 147,
+    42: 142,
+    43: 218,
+    44: 240,
+    45: 18,
+    46: 130,
+    47: 69,
+    48: 29,
+    49: 181,
+    50: 194,
+    51: 12,
+}
+
 def GF(number):
-    # Calculates the Galois Field 256 of a number modulo 100011101 (285)
-    # A hash map could be used here, but I wanted to code it
+    # Calculates the Galois Field GF(256) with byte-wise modulo 285
+    # A hash map would be FAR better here, but I wanted to code it as a recursion
+    # The inverse operation uses a hashmap for now
 
     if number < 2 ** 8:
         return number
@@ -136,6 +191,38 @@ def GF(number):
         return aux ^ 285
     
     return aux
+
+
+def GF_mult (n1, n2):
+    # Galois Field multiplication of two exponents of 2
+    value = int(np.log2(n1) + np.log2(n2))
+
+    while value >= 256:
+        value = value ^ 255
+    
+    return GF(2 ** value)
+
+
+def poly_mult(p1, p2):
+    # A polynomial is represented by an array [1, x^0, x^1, ...]
+    # This routine makes use of the arrays to calculate the multiplication
+
+    new_p = []
+    # Initializing the new polynomial
+    for i in range(len(p1) + len(p2) - 1):
+        new_p.append(0)   
+
+    for i in range(len(p1)):
+        for j in range(len(p2)):
+            
+            value = p1[i] * p2[j]
+
+            if value >= 2**256:
+                value = value % 255
+
+            new_p[i + j] += p1[i] * p2[j]
+
+    return new_p
 
 class QRCode():
     def __init__(self, data, mode, version, ec_level):
@@ -238,18 +325,30 @@ class QRCode():
                 counter += 8
                 self.g1.append(new_s)
 
-    
-    
-print(GF(2**12))
-for i in range(9, 20):
-    print(f'2 ^ {i}: {GF(2**i)}')
+    def generator_poly(self):
+        # Creates the generator poly for any number of error correction codewords
 
-# qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
+        n_code = 7
+        poly = poly_mult([2**0, 1], [2**1, 1])
 
-# ## ENCODING THE RAW DATA
+        for i in range(2, n_code):
+            poly = poly_mult(poly, [2**i, 1])
+
+        # Converting back to exponents
+        for i in range(len(poly)):
+            poly[i] = ANTI_GF[poly[i]]
+
+        return poly
+
+qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
+
+## ENCODING THE RAW DATA
 # qr.set_mode()
 # qr.character_count()
 # qr.alpha_conversion()
 # qr.terminator()
 # qr.padding()
 # qr.data_codewords()
+
+## ERROR CODEWORDS
+qr.generator_poly()
