@@ -121,65 +121,29 @@ TOTALBITS_TABLE = {
     '3-M': 352
 }
 
-ANTI_GF = {
-    1: 0,
-    2: 1,
-    3: 25,
-    4: 2,
-    5: 50,
-    6: 26,
-    7: 198,
-    8: 3,
-    9: 223,
-    10: 51,
-    11: 238,
-    12: 27,
-    13: 104,
-    14: 199,
-    15: 75,
-    16: 4,
-    17: 100,
-    18: 224,
-    19: 14,
-    20: 52,
-    21: 141,
-    22: 239,
-    23: 129,
-    24: 28,
-    25: 193,
-    26: 105,
-    27: 248,
-    28: 200,
-    29: 8,
-    30: 76,
-    31: 113,
-    32: 5,
-    33: 138,
-    34: 101,
-    35: 47,
-    36: 225,
-    37: 36,
-    38: 15,
-    39: 33,
-    40: 53,
-    41: 147,
-    42: 142,
-    43: 218,
-    44: 240,
-    45: 18,
-    46: 130,
-    47: 69,
-    48: 29,
-    49: 181,
-    50: 194,
-    51: 12,
-}
+# ANTI_GF tem offset de 1 para não ser necessário um dicionário
+ANTI_GF = [
+    0, 1, 25, 2, 50, 26, 198, 3, 223, 51, 238, 27, 104, 199, 75, 4, 100, 224, 14, 52,
+    141, 239, 129, 28, 193, 105, 248, 200, 8, 76, 113, 5, 138, 101, 47, 225, 36, 15, 
+    33, 53, 147, 142, 218, 240, 18, 130, 69, 29, 181, 194, 125, 106, 39, 249, 185, 
+    201, 154, 9, 120, 77, 228, 114, 166, 6, 191, 139, 98, 102, 221, 48, 253, 226, 
+    152, 37, 179, 16, 145, 34, 136, 54, 208, 148, 206, 143, 150, 219, 189, 241, 
+    210, 19, 92, 131, 56, 70, 64, 30, 66, 182, 163, 195, 72, 126, 110, 107, 58, 
+    40, 84, 250, 133, 186, 61, 202, 94, 155, 159, 10, 21, 121, 43, 78, 212, 229, 
+    172, 115, 243, 167, 87, 7, 112, 192, 247, 140, 128, 99, 13, 103, 74, 222, 237, 
+    49, 197, 254, 24, 227, 165, 153, 119, 38, 184, 180, 124, 17, 68, 146, 217, 35, 
+    32, 137, 46, 55, 63, 209, 91, 149, 188, 207, 205, 144, 135, 151, 178, 220, 252, 
+    190, 97, 242, 86, 211, 171, 20, 42, 93, 158, 132, 60, 57, 83, 71, 109, 65, 162, 
+    31, 45, 67, 216, 183, 123, 164, 118, 196, 23, 73, 236, 127, 12, 111, 246, 108, 
+    161, 59, 82, 41, 157, 85, 170, 251, 96, 134, 177, 187, 204, 62, 90, 203, 89, 
+    95, 176, 156, 169, 160, 81, 11, 245, 22, 235, 122, 117, 44, 215, 79, 174, 213, 
+    233, 230, 231, 173, 232, 116, 214, 244, 234, 168, 80, 88, 175
+]
 
 def GF(number):
     # Calculates the Galois Field GF(256) with byte-wise modulo 285
     # A hash map would be FAR better here, but I wanted to code it as a recursion
     # The inverse operation uses a hashmap for now
-
     if number < 2 ** 8:
         return number
 
@@ -193,34 +157,31 @@ def GF(number):
     return aux
 
 
-def GF_mult (n1, n2):
-    # Galois Field multiplication of two exponents of 2
-    value = int(np.log2(n1) + np.log2(n2))
-
-    while value >= 256:
-        value = value ^ 255
-    
-    return GF(2 ** value)
-
-
 def poly_mult(p1, p2):
-    # A polynomial is represented by an array [1, x^0, x^1, ...]
+    # A polynomial is represented by an array [a, bx^0, cx^1, ...]
+    # In order forl this to work, we must use exponents of 2, so the polynomial must have a, b, c only as the value of the exponent
+    # If the polynomial is 1 + 2x + 4x^2, the array should be [0, 1, 2]
     # This routine makes use of the arrays to calculate the multiplication
+    # The output is in the form [a, b, c, ...] meaning 2^a + 2^b x + 2^c x^2 + ...
 
     new_p = []
-    # Initializing the new polynomial
+    # Initializing the new polynomial with neutral XOR operator
     for i in range(len(p1) + len(p2) - 1):
         new_p.append(0)   
 
+    # First getting the polynomial in its conventional form
     for i in range(len(p1)):
         for j in range(len(p2)):
-            
-            value = p1[i] * p2[j]
-
-            if value >= 2**256:
+            # Since we are using exponents, there is no need to multiply them            
+            value = p1[i] + p2[j]
+            if value >= 256:
                 value = value % 255
 
-            new_p[i + j] += p1[i] * p2[j]
+            new_p[i + j] = new_p[i + j] ^ GF(2**value)
+
+    # Converting back to the generator polynomial
+    for i in range(len(new_p)):
+        new_p[i] = ANTI_GF[new_p[i] - 1]
 
     return new_p
 
@@ -312,6 +273,8 @@ class QRCode():
     #endregion
 
     # ---- ERROR CORRECTION -----
+    # The error correction requires data codewords, a generator polynomial and a message polynomial
+    # By dividing the polynomials we get the required codewords
                 
     def data_codewords(self):
         ## Generates the blocks and groups of codewords. Blocks are represented by the items in the g1 array
@@ -328,27 +291,35 @@ class QRCode():
     def generator_poly(self):
         # Creates the generator poly for any number of error correction codewords
 
-        n_code = 7
-        poly = poly_mult([2**0, 1], [2**1, 1])
+        n_code = self.eccodewords
+        poly = poly_mult([0, 0], [1, 0])
 
         for i in range(2, n_code):
-            poly = poly_mult(poly, [2**i, 1])
-
-        # Converting back to exponents
-        for i in range(len(poly)):
-            poly[i] = ANTI_GF[poly[i]]
+            poly = poly_mult(poly, [i, 0])
 
         return poly
+
+    def message_poly(self):
+        # Creates the message polynomial which is represented by an array of [a, b, c,...]
+        # This represents the polynomial a + bx + cx^2 + ....
+        message = []
+        for i in range(len(self.g1)):
+            message.append(format(self.g1[len(self.g1) - i - 1], 'b'))
+
+        for i in range(len(self.g2)):
+            message.append(format(self.g2[len(self.g2) - i - 1], 'b'))
+
+        return message
 
 qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 
 ## ENCODING THE RAW DATA
-# qr.set_mode()
-# qr.character_count()
-# qr.alpha_conversion()
-# qr.terminator()
-# qr.padding()
-# qr.data_codewords()
+qr.set_mode()
+qr.character_count()
+qr.alpha_conversion()
+qr.terminator()
+qr.padding()
+qr.data_codewords()
 
 ## ERROR CODEWORDS
-qr.generator_poly()
+qr.message_poly()
