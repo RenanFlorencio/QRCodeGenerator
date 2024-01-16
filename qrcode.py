@@ -121,7 +121,7 @@ TOTALBITS_TABLE = {
     '3-M': 352
 }
 
-# ANTI_GF tem offset de 1 para não ser necessário um dicionário
+# ANTI_GF has an offset of 1 so that a diccionary is required
 ANTI_GF = [
     0, 1, 25, 2, 50, 26, 198, 3, 223, 51, 238, 27, 104, 199, 75, 4, 100, 224, 14, 52,
     141, 239, 129, 28, 193, 105, 248, 200, 8, 76, 113, 5, 138, 101, 47, 225, 36, 15, 
@@ -288,9 +288,10 @@ class QRCode():
                 counter += 8
                 self.g1.append(new_s)
 
-    def generator_poly(self):
-        # Creates the generator poly for any number of error correction codewords
 
+    def generator_poly(self):
+        # Creates the generator poly for any number of error correction codewords   
+        # The polynomial is in the alpha notation form
         n_code = self.eccodewords
         poly = poly_mult([0, 0], [1, 0])
 
@@ -303,13 +304,46 @@ class QRCode():
         # Creates the message polynomial which is represented by an array of [a, b, c,...]
         # This represents the polynomial a + bx + cx^2 + ....
         message = []
-        for i in range(len(self.g1)):
-            message.append(format(self.g1[len(self.g1) - i - 1], 'b'))
+        for i in range(len(self.g1) - 1, -1, -1):
+            message.append(int(self.g1[i], 2))
 
-        for i in range(len(self.g2)):
-            message.append(format(self.g2[len(self.g2) - i - 1], 'b'))
+        for i in range(len(self.g2) - 1, -1, -1):
+            message.append(int(self.g2[i], 2))
 
         return message
+
+    def long_div(self):
+
+        message = self.message_poly()
+        generator = self.generator_poly()
+        message_term = len(message) # This is the original amount of terms
+        # The firts step is to multiply the message polynomial by x^n where n is the number of error correction
+        # codewords needed. This is to ensure that the exponent does not vanish during the divisions.
+        for _ in range(self.eccodewords):
+            message.append(0)
+
+        # The lead term of the generator polynomial should also have the same exponent
+        for _ in range(len(message) - len(generator)):
+            generator.append(0)
+
+        # The number of divisions must equal the number of terms in the message polynomial
+        # This will result in a remainder of len(message) - message_term which will be the codewords
+        # For example, this should be 7 for a 1-L code
+        aux = []
+        for _ in range(message_term):
+            
+            for i in range(len(message)):
+                for j in range(len(generator)):
+                    
+                    # Since we are using exponents, there is no need to multiply them            
+                    value = message[i] + generator[j]
+                    if value >= 256:
+                        value = value % 255
+
+                    aux.append(value ^ message[i])
+
+                
+
 
 qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 
@@ -322,4 +356,4 @@ qr.padding()
 qr.data_codewords()
 
 ## ERROR CODEWORDS
-qr.message_poly()
+qr.long_div()
