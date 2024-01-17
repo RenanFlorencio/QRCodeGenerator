@@ -194,13 +194,14 @@ class QRCode():
         self.string = ''
         self.ec = ec_level
         self.mode = mode
-        self.eccodewords = EC_CODEWORDS.get(self.id)
+        self.n_eccodewords = EC_CODEWORDS.get(self.id)
         self.blocksG1 = BLOCKS_G1.get(self.id)
         self.datacodeG1 = DATACODEWORDS_G1.get(self.id)
         self.blocksG2 = BLOCKS_G2.get(self.id)
         self.totalbits = TOTALBITS_TABLE.get(f'{version}-{ec_level}')
         self.g1 = []
         self.g2 = []
+        self.ec_codewords = []
 
     # ---- RAW DATA ENCODING ---- 
 
@@ -292,7 +293,7 @@ class QRCode():
     def generator_poly(self):
         # Creates the generator poly for any number of error correction codewords   
         # The polynomial is in the alpha notation form
-        n_code = self.eccodewords
+        n_code = self.n_eccodewords
         poly = poly_mult([0, 0], [1, 0])
 
         for i in range(2, n_code):
@@ -312,37 +313,74 @@ class QRCode():
 
         return message
 
-    def long_div(self):
+    def get_eccodewords(self):
 
-        message = self.message_poly()
-        generator = self.generator_poly()
-        message_term = len(message) # This is the original amount of terms
+        # message = self.message_poly()
+        # generator = self.generator_poly()
+        message =  [17, 236, 17, 236, 17, 236, 64, 67, 77, 220, 114, 209, 120, 11, 91, 32]
+        for i in range(len(message)):
+            message[i] = ANTI_GF[message[i] - 1]
+
+        generator = [45, 32, 94, 64, 70, 118, 61, 46, 67, 251, 0]
+
+
+        n_messageterm = len(message) # This is the original amount of terms
         # The firts step is to multiply the message polynomial by x^n where n is the number of error correction
         # codewords needed. This is to ensure that the exponent does not vanish during the divisions.
-        for _ in range(self.eccodewords):
-            message.append(0)
+        # In this case, 0 means 2 ** 0 = 1, so I will use '' as a representation of 0
+        for _ in range(self.n_eccodewords):
+            message.insert(0, '')
 
         # The lead term of the generator polynomial should also have the same exponent
         for _ in range(len(message) - len(generator)):
-            generator.append(0)
+            generator.insert(0, '')
 
         # The number of divisions must equal the number of terms in the message polynomial
-        # This will result in a remainder of len(message) - message_term which will be the codewords
+        # This will result in a remainder of len(message) - n_messageterm which will be the codewords
         # For example, this should be 7 for a 1-L code
+        ## STEPS ##
+        # Multiply the Generator Polynomial by the Lead Term of the Message Polynomial
+        # XOR the result with the message polynomial
+        # REPEAT: Multiply the Generator Polynomial by the Lead Term of the XOR result from the previous step
         aux = []
-        for _ in range(message_term):
+        term = message[len(message) - 1]
+        for i in range(n_messageterm):
+
+            for j in range(len(generator)):
+
+                # Since we are using exponents, there is no need to multiply them
+                if generator[j] != '':
+                    if message[j] != '':
+
+                        value = term + generator[j]
+                        if value >= 256:
+                            value = value % 255
+                        aux.append(GF(2**value) ^ GF(2**message[j]))
+
+                    else:
+                        aux.append('')
+                else:
+                    if message[j] == '': aux.append('')
+                    else: aux.append(GF(2**message[j]))
             
-            for i in range(len(message)):
-                for j in range(len(generator)):
-                    
-                    # Since we are using exponents, there is no need to multiply them            
-                    value = message[i] + generator[j]
-                    if value >= 256:
-                        value = value % 255
+            message = aux.copy()
+            message[len(message) - 1 -i] = ''
+            for k in range(len(message)):
+                if message[k] != '':
+                    message[k] = ANTI_GF[message[k] - 1]
 
-                    aux.append(value ^ message[i])
+            term = message[-2 - i]
 
-                
+            if i != n_messageterm - 1:
+                aux.clear()
+
+        # The error correction codewords are the remainder terms
+        # self.ec_codewords = aux[len(aux) - 1 - self.n_eccodewords: len(aux) - 1]
+        for i in range(len(aux)):
+            if aux[i] != 0:
+                aux[i] = ANTI_GF[aux[i]]
+        print(aux)
+        return self.ec_codewords
 
 
 qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
@@ -356,4 +394,4 @@ qr.padding()
 qr.data_codewords()
 
 ## ERROR CODEWORDS
-qr.long_div()
+qr.get_eccodewords()
