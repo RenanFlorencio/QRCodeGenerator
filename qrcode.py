@@ -1,6 +1,20 @@
 import numpy as np
+import pprint
 
 # Hashmaps
+VERSIONS_DIMENSIONS = {
+    1: 21,
+    2: 25,
+    3: 29,
+    4: 33,
+    5: 37,
+    6: 41,
+    7: 45,
+    8: 49,
+    9: 53,
+    10: 57,
+}
+
 ALPHANUMERIC_TABLE = {
     '0': 0,
     '1': 1,
@@ -190,7 +204,9 @@ class QRCode():
         self.id = f'{version}-{ec_level}'
         self.version = version
         self.data = data
+        self.dim = VERSIONS_DIMENSIONS[self.version]
         self.datalen = len(data)
+        self.shape = VERSIONS_DIMENSIONS[self.version]
         self.string = ''
         self.ec = ec_level
         self.mode = mode
@@ -202,8 +218,20 @@ class QRCode():
         self.g1 = []
         self.g2 = []
         self.ec_codewords = []
+        self.matrix = []
+        self.init_matrix()
 
-    # ---- RAW DATA ENCODING ---- 
+
+    def init_matrix(self):
+    # Initializes matrix full of zeros
+        line = []
+        for i in range(self.dim):
+            line.append(0)
+        for i in range(self.dim):
+            self.matrix.append(line.copy())
+
+
+    #region ---- RAW DATA ENCODING ---- 
 
     def fill_zeros (self, string, amount):
         ## Fills the given string with ´amount´ zeros before it.
@@ -273,10 +301,10 @@ class QRCode():
             
     #endregion
 
-    # ---- ERROR CORRECTION -----
+    #region ---- ERROR CORRECTION -----
     # The error correction requires data codewords, a generator polynomial and a message polynomial
     # By dividing the polynomials we get the required codewords
-                
+    
     def data_codewords(self):
         ## Generates the blocks and groups of codewords. Blocks are represented by the items in the g1 array
         if self.blocksG2 == 0:
@@ -288,7 +316,6 @@ class QRCode():
                 
                 counter += 8
                 self.g1.append(new_s)
-
 
     def generator_poly(self):
         # Creates the generator poly for any number of error correction codewords   
@@ -390,20 +417,57 @@ class QRCode():
 
         # The error correction codewords are the remainder terms
         # self.ec_codewords = aux[len(aux) - 1 - self.n_eccodewords: len(aux) - 1]
-        eccodewords = message[:self.ec_codewords]
+        eccodewords = message[:self.n_eccodewords]
         self.ec_codewords = eccodewords
         return eccodewords
 
+    def place_eccodewords(self):
+        # This function simply adds the ec codewords to the qr code string
+        for i in range(self.n_eccodewords):
+            codeword = format(self.ec_codewords[i], 'b')
+            formatted_s = (8 - len(codeword)) * '0' + codeword
+            self.string += formatted_s
+
+    #endregion
+
+    #region ---- CODE STRUCTURE -----
+   
+    # For now, this is very inefficient and all those steps can be done at once.
+    # To keep things easier to debug, I've implemented them separetely
+
+    def finder_pattern(self):
+        # Creates the finder pattern for the QR Code
+
+        for i in range(self.dim):
+            for j in range(self.dim):
+
+                if (i == j == 0) or (i == 0 and j == self.dim - 7) or (i == self.dim - 7 and j == 0):
+
+                    for k in range(5):
+                        self.matrix[i + 1][j + 1 + k] = 1
+                        self.matrix[i + 5][j + 1 + k] = 1
+                    
+                    for k in range(3):
+                        self.matrix[i + 2 + k][j + 1] = 1
+                        self.matrix[i + 2 + k][j + 5] = 1
+                
 
 qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 
-## ENCODING THE RAW DATA
-qr.set_mode()
-qr.character_count()
-qr.alpha_conversion()
-qr.terminator()
-qr.padding()
-qr.data_codewords()
+# ## ENCODING THE RAW DATA
+# qr.set_mode()
+# qr.character_count()
+# qr.alpha_conversion()
+# qr.terminator()
+# qr.padding()
+# qr.data_codewords()
 
-## ERROR CODEWORDS
-qr.get_eccodewords()
+# ## ERROR CODEWORDS
+# qr.get_eccodewords()
+# qr.place_eccodewords()
+# -> For larger QR Codes (those which have more than one block) it is necessary to interleave the data and the
+#   error correction codewords. For now, this step is going to be skipped
+
+## QR CODE STRUCTURE
+qr.finder_pattern()
+pprint.pprint(qr.matrix)
