@@ -314,15 +314,9 @@ class QRCode():
         return message
 
     def get_eccodewords(self):
-
-        # message = self.message_poly()
-        # generator = self.generator_poly()
-        message =  [17, 236, 17, 236, 17, 236, 64, 67, 77, 220, 114, 209, 120, 11, 91, 32]
-        for i in range(len(message)):
-            message[i] = ANTI_GF[message[i] - 1]
-
-        generator = [45, 32, 94, 64, 70, 118, 61, 46, 67, 251, 0]
-
+        # Returns the error correction codewords as integers
+        message = self.message_poly()
+        generator = self.generator_poly()
 
         n_messageterm = len(message) # This is the original amount of terms
         # The firts step is to multiply the message polynomial by x^n where n is the number of error correction
@@ -350,37 +344,55 @@ class QRCode():
 
                 # Since we are using exponents, there is no need to multiply them
                 if generator[j] != '':
+                    value = term + generator[j]
+                    
                     if message[j] != '':
 
-                        value = term + generator[j]
                         if value >= 256:
                             value = value % 255
                         aux.append(GF(2**value) ^ GF(2**message[j]))
 
+                    # If message is zero, the XOR result is the value itself
                     else:
-                        aux.append('')
+                        aux.append(GF(2**value))
+
+                # If the generator is zero
                 else:
-                    if message[j] == '': aux.append('')
-                    else: aux.append(GF(2**message[j]))
+                    if message[j] == '':
+                        aux.append('')
+                    else: 
+                        # If the message is not zero, the XOR result is the message itself
+                        aux.append(GF(2**message[j]))
             
+            # Now it is important to get the next term to be multiplied
+            # The message should be the result
             message = aux.copy()
             message[len(message) - 1 -i] = ''
+
+            # If there are no more iterations, get out of the function
+            if i != n_messageterm - 1:
+                aux.clear()
+            else:
+                # Skipping unnecessary calculations
+                break
+
+            # Turning the message back to integer            
             for k in range(len(message)):
                 if message[k] != '':
                     message[k] = ANTI_GF[message[k] - 1]
-
             term = message[-2 - i]
+            
+            # Adjusting the generator to the exponents needed
+            for k in range(len(generator) - 1):
+                generator[k] = generator[k + 1]
+            generator[len(generator) - 1] = ''
 
-            if i != n_messageterm - 1:
-                aux.clear()
 
         # The error correction codewords are the remainder terms
         # self.ec_codewords = aux[len(aux) - 1 - self.n_eccodewords: len(aux) - 1]
-        for i in range(len(aux)):
-            if aux[i] != 0:
-                aux[i] = ANTI_GF[aux[i]]
-        print(aux)
-        return self.ec_codewords
+        eccodewords = message[:self.ec_codewords]
+        self.ec_codewords = eccodewords
+        return eccodewords
 
 
 qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
