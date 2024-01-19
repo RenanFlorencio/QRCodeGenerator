@@ -454,32 +454,37 @@ class QRCode():
                     for k in range(3):
                         self.matrix[i + 2 + k][j + 1] = 1
                         self.matrix[i + 2 + k][j + 5] = 1
-                    # TERMINATOR
                     
-                    # Right terminator
-                    for k in range(9):
-                        try:
-                            self.matrix[i + k][j + 8] = 1
-                        except IndexError:
-                            pass
-                    # Top terminator
-                    for k in range(9):
-                        try:
-                            self.matrix[i - 1][j + k] = 1
-                        except IndexError:
-                            pass
-                    # Bottom terminator
-                    for k in range(9):
-                        try:
-                            self.matrix[i + 8][j - 1 + k] = 1
-                        except IndexError:
-                            pass
-                    # Left terminator
-                    for k in range(9):
-                        try:
-                            self.matrix[i + k][j - 1] = 1
-                        except IndexError:
-                            pass       
+                    # SEPARATOR
+                    if j == 0:
+                        # Right separator
+                        for k in range(9):
+                            if i != 0:
+                                self.matrix[i + k - 1][j + 8] = 1
+
+                        if i == 0:
+                            # Bottom separator
+                            for k in range(9):
+                                if j != 0:
+                                    self.matrix[i + 8][j - 1 + k] = 1
+
+                        if i == self.dim - 7:
+                            # Top separator
+                            for k in range(9):
+                                if j != 0:
+                                    self.matrix[i - 1][j + k - 1] = 1
+
+                    else:     
+                        # Left separator
+                        for k in range(9):
+                            try:
+                                self.matrix[i + k][j - 1] = 1
+                            except IndexError:
+                                pass
+                        # Bottom separator
+                        for k in range(9):
+                            if j != 0:
+                                self.matrix[i + 8][j - 1 + k] = 1
                 
 
 qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
