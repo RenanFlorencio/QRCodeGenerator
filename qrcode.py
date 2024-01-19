@@ -1,4 +1,4 @@
-import numpy as np
+from matplotlib import pyplot as plt
 import pprint
 
 # Hashmaps
@@ -435,6 +435,10 @@ class QRCode():
     # For now, this is very inefficient and all those steps can be done at once.
     # To keep things easier to debug, I've implemented them separetely
 
+    def show_code(self):
+        plt.imshow(self.matrix, interpolation='nearest', cmap='gray', vmin=0, vmax=1)
+        plt.show()
+
     def finder_pattern(self):
         # Creates the finder pattern for the QR Code
 
@@ -442,7 +446,7 @@ class QRCode():
             for j in range(self.dim):
 
                 if (i == j == 0) or (i == 0 and j == self.dim - 7) or (i == self.dim - 7 and j == 0):
-
+                    # Finder
                     for k in range(5):
                         self.matrix[i + 1][j + 1 + k] = 1
                         self.matrix[i + 5][j + 1 + k] = 1
@@ -450,6 +454,32 @@ class QRCode():
                     for k in range(3):
                         self.matrix[i + 2 + k][j + 1] = 1
                         self.matrix[i + 2 + k][j + 5] = 1
+                    # TERMINATOR
+                    
+                    # Right terminator
+                    for k in range(9):
+                        try:
+                            self.matrix[i + k][j + 8] = 1
+                        except IndexError:
+                            pass
+                    # Top terminator
+                    for k in range(9):
+                        try:
+                            self.matrix[i - 1][j + k] = 1
+                        except IndexError:
+                            pass
+                    # Bottom terminator
+                    for k in range(9):
+                        try:
+                            self.matrix[i + 8][j - 1 + k] = 1
+                        except IndexError:
+                            pass
+                    # Left terminator
+                    for k in range(9):
+                        try:
+                            self.matrix[i + k][j - 1] = 1
+                        except IndexError:
+                            pass       
                 
 
 qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
@@ -470,4 +500,5 @@ qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 
 ## QR CODE STRUCTURE
 qr.finder_pattern()
+qr.show_code()
 pprint.pprint(qr.matrix)
