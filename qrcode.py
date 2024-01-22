@@ -204,7 +204,6 @@ class QRCode():
         self.id = f'{version}-{ec_level}'
         self.version = version
         self.data = data
-        self.dim = VERSIONS_DIMENSIONS[self.version]
         self.datalen = len(data)
         self.shape = VERSIONS_DIMENSIONS[self.version]
         self.string = ''
@@ -225,9 +224,9 @@ class QRCode():
     def init_matrix(self):
     # Initializes matrix full of zeros
         line = []
-        for i in range(self.dim):
-            line.append(0)
-        for i in range(self.dim):
+        for _ in range(self.shape):
+            line.append(0.5)
+        for _ in range(self.shape):
             self.matrix.append(line.copy())
 
 
@@ -441,11 +440,12 @@ class QRCode():
 
     def finder_pattern(self):
         # Creates the finder pattern for the QR Code
+        covered_area = [] # top-left, top-right, bottom-left, bottom-right
+        # FIXED PATTERNS
+        for i in range(self.shape):
+            for j in range(self.shape):
 
-        for i in range(self.dim):
-            for j in range(self.dim):
-
-                if (i == j == 0) or (i == 0 and j == self.dim - 7) or (i == self.dim - 7 and j == 0):
+                if (i == j == 0) or (i == 0 and j == self.shape - 7) or (i == self.shape - 7 and j == 0):
                     # Finder
                     for k in range(5):
                         self.matrix[i + 1][j + 1 + k] = 1
@@ -459,33 +459,47 @@ class QRCode():
                     if j == 0:
                         # Right separator
                         for k in range(9):
-                            if i != 0:
-                                self.matrix[i + k - 1][j + 8] = 1
+                            if i + k != 0 and i + k - 1 != self.shape:
+                                self.matrix[i + k - 1][j + 7] = 1
 
                         if i == 0:
                             # Bottom separator
                             for k in range(9):
-                                if j != 0:
-                                    self.matrix[i + 8][j - 1 + k] = 1
+                                if j + k != 0:
+                                    self.matrix[i + 7][j - 1 + k] = 1
 
-                        if i == self.dim - 7:
+                        else:
                             # Top separator
                             for k in range(9):
-                                if j != 0:
+                                if j + k != 0:
                                     self.matrix[i - 1][j + k - 1] = 1
 
                     else:     
                         # Left separator
-                        for k in range(9):
-                            try:
-                                self.matrix[i + k][j - 1] = 1
-                            except IndexError:
-                                pass
+                        for k in range(8):
+                            self.matrix[i + k][j - 1] = 1
                         # Bottom separator
-                        for k in range(9):
-                            if j != 0:
-                                self.matrix[i + 8][j - 1 + k] = 1
-                
+                        for k in range(8):
+                            self.matrix[i + 7][j - 1 + k] = 1
+
+                # TIMING PATTERN
+                if (i == 6 and 8 <= j <= self.shape - 9):
+                    if j % 2 == 0:
+                        self.matrix[i][j] = 0
+                    else:
+                        self.matrix[i][j] = 1
+                if (8 <= i <= self.shape - 9 and j == 6):
+                    if i % 2 == 0:
+                        self.matrix[i][j] = 0
+                    else:
+                        self.matrix[i][j] = 1
+        
+        covered_area.append([0, 7, 7], [self.shape - 7, 7, 7], [])
+
+        # DARK MODULE
+        self.matrix[(4 * self.version) + 9][8]
+
+        # VERSION AREA
 
 qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 
@@ -504,6 +518,14 @@ qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 #   error correction codewords. For now, this step is going to be skipped
 
 ## QR CODE STRUCTURE
+# For versions greater than 1, an alignment pattern is necessary. https://www.thonky.com/qr-code-tutorial/alignment-pattern-locations
 qr.finder_pattern()
 qr.show_code()
 pprint.pprint(qr.matrix)
+
+# I've come up with three ways to avoid the occupied areas when adding the data to the QR Code
+# - The first one is to keep an array with the covered areas (start, height, width), but that would make it necessary
+#   to go thorough the array for every module of the QR Code, which would not be very fast.
+# - The second option would be to create have a position and and occuppied boolean for every module of the QR Code
+#   This would make it easier to make verifications, but would take up a lot of memory.
+# For now, I think the array is a better ideia, since most of the covered areas are fixed.
