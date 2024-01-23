@@ -1,6 +1,10 @@
 from matplotlib import pyplot as plt
 import pprint
 
+WHITE = 0
+BLACK = 1
+GRAY = 0.5
+
 # Hashmaps
 VERSIONS_DIMENSIONS = {
     1: 21,
@@ -201,31 +205,33 @@ def poly_mult(p1, p2):
 
 class QRCode():
     def __init__(self, data, mode, version, ec_level):
-        self.id = f'{version}-{ec_level}'
-        self.version = version
-        self.data = data
-        self.datalen = len(data)
-        self.shape = VERSIONS_DIMENSIONS[self.version]
-        self.string = ''
-        self.ec = ec_level
-        self.mode = mode
-        self.n_eccodewords = EC_CODEWORDS.get(self.id)
-        self.blocksG1 = BLOCKS_G1.get(self.id)
-        self.datacodeG1 = DATACODEWORDS_G1.get(self.id)
-        self.blocksG2 = BLOCKS_G2.get(self.id)
-        self.totalbits = TOTALBITS_TABLE.get(f'{version}-{ec_level}')
-        self.g1 = []
-        self.g2 = []
-        self.ec_codewords = []
-        self.matrix = []
+        self.id = f'{version}-{ec_level}' # ID used to search the hashmaps
+        self.version = version # Versio of the QR Code
+        self.data = data # Data to be encoded
+        self.datalen = len(data) # Lenght of data
+        self.shape = VERSIONS_DIMENSIONS[self.version] # Dimension of the QR Code
+        self.string = '' # Binary string representing data and error correction
+        self.ec = ec_level # Level of error correction (L, M, H)
+        self.mode = mode # QR Code mode (Alphanumeric, Numeric, ...)
+        self.n_eccodewords = EC_CODEWORDS.get(self.id) # Number of EC codewords
+        self.blocksG1 = BLOCKS_G1.get(self.id) # Number of blocks in group 1
+        self.datacodeG1 = DATACODEWORDS_G1.get(self.id) # Number of data codewords for each block
+        self.blocksG2 = BLOCKS_G2.get(self.id) # Number of blocks in group 2
+        self.totalbits = TOTALBITS_TABLE.get(f'{version}-{ec_level}') # Total bits necessary
+        self.g1 = [] # Codewords of G1 group
+        self.g2 = [] # Codewords of G2 group
+        self.ec_codewords = [] # Error correction codewords
+        self.matrix = [] # Final matrix
+        self.covered_area = []  # Area covered by mandatory patterns
+                                # start_row, start_column, width, height
         self.init_matrix()
 
 
     def init_matrix(self):
-    # Initializes matrix full of zeros
+    # Initializes a gray matrix
         line = []
         for _ in range(self.shape):
-            line.append(0.5)
+            line.append(GRAY)
         for _ in range(self.shape):
             self.matrix.append(line.copy())
 
@@ -435,12 +441,11 @@ class QRCode():
     # To keep things easier to debug, I've implemented them separetely
 
     def show_code(self):
-        plt.imshow(self.matrix, interpolation='nearest', cmap='gray', vmin=0, vmax=1)
+        plt.imshow(self.matrix, interpolation='nearest', cmap='gray_r', vmin=0, vmax=1)
         plt.show()
 
     def finder_pattern(self):
         # Creates the finder pattern for the QR Code
-        covered_area = [] # top-left, top-right, bottom-left, bottom-right
         # FIXED PATTERNS
         for i in range(self.shape):
             for j in range(self.shape):
@@ -448,58 +453,98 @@ class QRCode():
                 if (i == j == 0) or (i == 0 and j == self.shape - 7) or (i == self.shape - 7 and j == 0):
                     # Finder
                     for k in range(5):
-                        self.matrix[i + 1][j + 1 + k] = 1
-                        self.matrix[i + 5][j + 1 + k] = 1
+                        self.matrix[i + 1][j + 1 + k] = WHITE
+                        self.matrix[i + 5][j + 1 + k] = WHITE
                     
                     for k in range(3):
-                        self.matrix[i + 2 + k][j + 1] = 1
-                        self.matrix[i + 2 + k][j + 5] = 1
+                        self.matrix[i + 2 + k][j + 1] = WHITE
+                        self.matrix[i + 2 + k][j + 5] = WHITE
                     
                     # SEPARATOR
                     if j == 0:
                         # Right separator
                         for k in range(9):
                             if i + k != 0 and i + k - 1 != self.shape:
-                                self.matrix[i + k - 1][j + 7] = 1
+                                self.matrix[i + k - 1][j + 7] = WHITE
 
                         if i == 0:
                             # Bottom separator
                             for k in range(9):
                                 if j + k != 0:
-                                    self.matrix[i + 7][j - 1 + k] = 1
+                                    self.matrix[i + 7][j - 1 + k] = WHITE
 
                         else:
                             # Top separator
                             for k in range(9):
                                 if j + k != 0:
-                                    self.matrix[i - 1][j + k - 1] = 1
+                                    self.matrix[i - 1][j + k - 1] = WHITE
 
                     else:     
                         # Left separator
                         for k in range(8):
-                            self.matrix[i + k][j - 1] = 1
+                            self.matrix[i + k][j - 1] = WHITE
                         # Bottom separator
                         for k in range(8):
-                            self.matrix[i + 7][j - 1 + k] = 1
+                            self.matrix[i + 7][j - 1 + k] = WHITE
 
                 # TIMING PATTERN
                 if (i == 6 and 8 <= j <= self.shape - 9):
                     if j % 2 == 0:
-                        self.matrix[i][j] = 0
+                        self.matrix[i][j] = BLACK
                     else:
-                        self.matrix[i][j] = 1
+                        self.matrix[i][j] = WHITE
                 if (8 <= i <= self.shape - 9 and j == 6):
                     if i % 2 == 0:
-                        self.matrix[i][j] = 0
+                        self.matrix[i][j] = BLACK
                     else:
-                        self.matrix[i][j] = 1
+                        self.matrix[i][j] = WHITE
         
-        covered_area.append([0, 7, 7], [self.shape - 7, 7, 7], [])
+        if self.version <= 7:
+            # Finder pattern + information reservation
+            self.covered_area.append([0, 0, 8, 8]) # Top left
+            self.covered_area.append([0, self.shape - 8, 7, 8]) # Top right
+            self.covered_area.append([self.shape - 8, 8, 7]) # Botton left
+
+        if self.version >= 2:
+            # Here goes the alignment patterns positions
+            pass
 
         # DARK MODULE
-        self.matrix[(4 * self.version) + 9][8]
+        self.matrix[(4 * self.version) + 9][8] # This goes into the same region as the version information
 
-        # VERSION AREA
+
+    def isCovered(self, row, column):
+
+        for i in range(len(self.covered_area)):
+            if self.covered_area[i][0] <= row <= self.covered_area[i][0] + self.covered_area[i][2]:
+                return True
+            if self.covered_area[i][1] <= column <= self.covered_area[i][0] + self.covered_area[i][3]:
+                return True
+
+    def data_placement(self):
+
+        counter = 0 # This is used to check whether the pattern goes up or down
+                    # If the counter is even, the pattern goes up, if the counter is odd, the pattern goes down
+        data_int = int(self.string, 2)
+
+        for column in range(self.shape - 1, -1, -2):
+
+            if column == 6: # Timing pattern
+                continue
+
+            if counter % 2 == 0: # Going up
+
+                for row in range(self.shape - 1, -1, -1):
+                    
+                    if row == 6: # Timing pattern
+                        continue
+
+                    if not self.isCovered(row, column):
+                        self.matrix[row][column] = data_int
+                        data_int = data_int >> 1
+
+
+
 
 qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 
@@ -518,7 +563,8 @@ qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 #   error correction codewords. For now, this step is going to be skipped
 
 ## QR CODE STRUCTURE
-# For versions greater than 1, an alignment pattern is necessary. https://www.thonky.com/qr-code-tutorial/alignment-pattern-locations
+# For versions greater than 1, an alignment pattern is necessary. 
+# https://www.thonky.com/qr-code-tutorial/alignment-pattern-locations
 qr.finder_pattern()
 qr.show_code()
 pprint.pprint(qr.matrix)
