@@ -1,5 +1,6 @@
 from matplotlib import pyplot as plt
 import pprint
+from math import floor
 
 WHITE = 0
 BLACK = 1
@@ -203,6 +204,10 @@ def poly_mult(p1, p2):
 
     return new_p
 
+def show_code(matrix):
+    plt.imshow(matrix, interpolation='nearest', cmap='gray_r', vmin=0, vmax=1)
+    plt.show()
+
 class QRCode():
     def __init__(self, data, mode, version, ec_level):
         self.id = f'{version}-{ec_level}' # ID used to search the hashmaps
@@ -231,7 +236,7 @@ class QRCode():
     # Initializes a gray matrix
         line = []
         for _ in range(self.shape):
-            line.append(GRAY)
+            line.append(BLACK)
         for _ in range(self.shape):
             self.matrix.append(line.copy())
 
@@ -503,7 +508,7 @@ class QRCode():
             # Finder pattern + information reservation
             self.covered_area.append([0, 0, 8, 8]) # Top left
             self.covered_area.append([0, self.shape - 8, 7, 8]) # Top right
-            self.covered_area.append([self.shape - 8, 8, 7]) # Botton left
+            self.covered_area.append([self.shape - 8, 0, 8, 7]) # Botton left
 
         if self.version >= 2:
             # Here goes the alignment patterns positions
@@ -516,57 +521,139 @@ class QRCode():
     def isCovered(self, row, column):
 
         for i in range(len(self.covered_area)):
-            if self.covered_area[i][0] <= row <= self.covered_area[i][0] + self.covered_area[i][2]:
+            if self.covered_area[i][0] <= row <= self.covered_area[i][0] + self.covered_area[i][3] and self.covered_area[i][1] <= column <= self.covered_area[i][1] + self.covered_area[i][2]:
                 return True
-            if self.covered_area[i][1] <= column <= self.covered_area[i][0] + self.covered_area[i][3]:
-                return True
+        return False
 
     def data_placement(self):
 
         counter = 0 # This is used to check whether the pattern goes up or down
                     # If the counter is even, the pattern goes up, if the counter is odd, the pattern goes down
         data_int = int(self.string, 2)
+        column = self.shape - 1
 
-        for column in range(self.shape - 1, -1, -2):
+        while column >= 0:
 
-            if column == 6: # Timing pattern
+            if column == 6: # Timing pattern for columns skips only one column
+                column -= 1
                 continue
 
             if counter % 2 == 0: # Going up
 
                 for row in range(self.shape - 1, -1, -1):
-                    
-                    if row == 6: # Timing pattern
+
+                    if row == 6:
                         continue
 
                     if not self.isCovered(row, column):
-                        self.matrix[row][column] = data_int
+                        self.matrix[row][column] = data_int & 0b1
+                        data_int = data_int >> 1
+                        self.matrix[row][column - 1] = data_int & 0b1
+                        data_int = data_int >> 1
+            
+            else: # Going down
+                for row in range(self.shape):
+
+                    if row == 6: # Timing Pattern 
+                        continue
+
+                    if not self.isCovered(row, column):
+                        self.matrix[row][column] = data_int & 0b1
+                        data_int = data_int >> 1
+                        self.matrix[row][column - 1] = data_int & 0b1
                         data_int = data_int >> 1
 
+            column -= 2 # Generally, skipping two columns
+            counter += 1
+
+
+    def evaluate(matrix):
+        # This function evaluates a given function and returns its penalty score
+        score = 0
+
+        return score
+
+    def data_mask(self):
+        # After encoding the data, eight masks must be applied to it and evaluated based on four conditions
+        # The evaluation gives it a penalty score. The lowest penalty score wins.
+
+        # Mask Number / If the formula below is true for a given row/column coordinate, switch the bit at that coordinate
+        # 0	(row + column) mod 2 == 0
+        # 1	(row) mod 2 == 0
+        # 2	(column) mod 3 == 0
+        # 3	(row + column) mod 3 == 0
+        # 4	( floor(row / 2) + floor(column / 3) ) mod 2 == 0
+        # 5	((row * column) mod 2) + ((row * column) mod 3) == 0
+        # 6	( ((row * column) mod 2) + ((row * column) mod 3) ) mod 2 == 0
+        # 7	( ((row + column) mod 2) + ((row * column) mod 3) ) mod 2 == 0
+        # This table is available at https://www.thonky.com/qr-code-tutorial/mask-patterns
+
+        # This is an array of matrices that are going to be altered at the same time, consuming memory but only going
+        # through the matrix a single time: O(n^2)
+        # Another option would be to have a single matrix and run through it multiple times, evaluating and reseting it
+        # after each evaluation, which would cost time O(7 * n^2). This does simplify to O(n^2) for greater values of n,
+        # but to keep the code more clear and save a little time, I chose the first option.
+        matrices = []
+        for _ in range(8):
+            m = []
+            for i in range(self.shape):
+                m.append(self.matrix[i].copy())
+            matrices.append(m)
+
+        # DATA MASKS
+        for row in range(self.shape):
+            for column in range(self.shape):
+
+                if self.isCovered(row, column): # The reserved areas should not be masked
+                    continue
+
+                if (row + column) % 2 == 0:                                 # Data mask 0
+                    matrices[0][row][column] = 1 - matrices[0][row][column]
+                if row % 2 == 0:                                            # Data mask 1
+                    matrices[1][row][column] = 1 - matrices[1][row][column]
+                if column % 3 == 0:                                         # Data mask 2
+                    matrices[2][row][column] = 1 - matrices[2][row][column]
+                if (row + column) % 3:                                      # Data mask 3
+                    matrices[3][row][column] = 1 - matrices[3][row][column]
+                if (floor(row / 2) + floor(column / 3)) % 2 == 0:           # Data mask 4
+                    matrices[4][row][column] = 1 - matrices[4][row][column]
+                if ((row * column) % 2) + ((row * column) % 3) == 0:        # Data mask 5
+                    matrices[5][row][column] = 1 - matrices[5][row][column]
+                if (((row * column) % 2) + ((row * column) % 3) ) % 2 == 0: # Data mask 6
+                    matrices[6][row][column] = 1 - matrices[6][row][column]
+                if (((row + column) % 2) + ((row * column) % 3) ) % 2 == 0: # Data mask 7
+                    matrices[7][row][column] = 1 - matrices[7][row][column]
+    
+        for m in matrices:
+            m = evaluate(m)
 
 
 
-qr = QRCode('HELLO', 'Alphanumeric', 1, 'L')
 
-# ## ENCODING THE RAW DATA
-# qr.set_mode()
-# qr.character_count()
-# qr.alpha_conversion()
-# qr.terminator()
-# qr.padding()
-# qr.data_codewords()
+qr = QRCode('HELLO WORLD', 'Alphanumeric', 1, 'L')
 
-# ## ERROR CODEWORDS
-# qr.get_eccodewords()
-# qr.place_eccodewords()
+## ENCODING THE RAW DATA
+qr.set_mode()
+qr.character_count()
+qr.alpha_conversion()
+qr.terminator()
+qr.padding()
+qr.data_codewords()
+
+## ERROR CODEWORDS
+qr.get_eccodewords()
+qr.place_eccodewords()
 # -> For larger QR Codes (those which have more than one block) it is necessary to interleave the data and the
 #   error correction codewords. For now, this step is going to be skipped
 
 ## QR CODE STRUCTURE
 # For versions greater than 1, an alignment pattern is necessary. 
 # https://www.thonky.com/qr-code-tutorial/alignment-pattern-locations
+
 qr.finder_pattern()
+qr.data_placement()
 qr.show_code()
+qr.data_mask()
 pprint.pprint(qr.matrix)
 
 # I've come up with three ways to avoid the occupied areas when adding the data to the QR Code
