@@ -204,9 +204,11 @@ def poly_mult(p1, p2):
 
     return new_p
 
+
 def show_code(matrix):
     plt.imshow(matrix, interpolation='nearest', cmap='gray_r', vmin=0, vmax=1)
     plt.show()
+
 
 class QRCode():
     def __init__(self, data, mode, version, ec_level):
@@ -449,6 +451,7 @@ class QRCode():
         plt.imshow(self.matrix, interpolation='nearest', cmap='gray_r', vmin=0, vmax=1)
         plt.show()
 
+
     def finder_pattern(self):
         # Creates the finder pattern for the QR Code
         # FIXED PATTERNS
@@ -525,6 +528,7 @@ class QRCode():
                 return True
         return False
 
+
     def data_placement(self):
 
         counter = 0 # This is used to check whether the pattern goes up or down
@@ -567,12 +571,117 @@ class QRCode():
             counter += 1
 
 
-    def evaluate(matrix):
-        # This function evaluates a given function and returns its penalty score
-        score = 0
+    def evaluate(self, matrix):
+        # This function evaluates a given function and returns its penalty score based on four evaluation conditions
+        penalties = [0, 0, 0, 0]
 
-        return score
+        row_counter = 0
+        column_counter = 0
+        for row in range(self.shape):
+            for column in range(self.shape):
 
+                # EVALUATION CONDITION 0
+                # For every row and column, check 
+                # If there are five consecutive modules of the same color, add 3 to the penalty. 
+                # If there are more modules of the same color after the first five, add 1 for each additional module of the same color
+                # Since this is a square, I can loop through row and column at the same time just by swapping them
+
+                # Checking for rows
+                bit = matrix[row][column]
+                if bit == BLACK:
+                    row_counter += 1
+
+                    if row_counter == 3:
+                        penalties[0] += 3
+
+                    elif row_counter > 3:
+                        penalties[0] += 1
+
+                else:
+                    row_counter == 0
+            
+                # Checking for columns
+                bit = matrix[column][row]
+                if bit == BLACK:
+                    column_counter += 1
+
+                    if column_counter == 3:
+                        penalties[0] += 3
+
+                    elif column_counter > 3:
+                        penalties[0] += 1
+
+                else:
+                    column_counter == 0
+
+                # EVALUATION CONDITION 1
+                # Add 3 to the penalty score for every 2x2 block of the same color in the QR code, 
+                # making sure to count overlapping 2x2 blocks
+                # To do this, I'm only looking for even rows and columns for every bit verifying its adjacent bits
+                if row % 2 == 0 and column % 2 == 0:
+                    bit = matrix[row][column]
+
+                    if column - 1 > 0 and column + 1 < self.shape and row - 1 > 0 and row + 1 < self.shape:
+                        bit_l = matrix[row][column - 1]
+                        bit_r = matrix[row][column + 1]
+
+                        if bit_l == bit_r and bit != bit_r: # If there are no similar colors, there is no need to check
+                            continue
+
+                        bit_lu = matrix[row - 1][column - 1]
+                        bit_ld = matrix[row + 1][column - 1]
+                        bit_ru = matrix[row - 1][column + 1]
+                        bit_rd = matrix[row + 1][column + 1]
+                    
+                    else:
+
+                        if column - 1 > 0:
+                            bit_l = matrix[row][column - 1] # bit left
+
+                            if row - 1 > 0:
+                                bit_u = matrix[row - 1][column] # bit up
+                                bit_lu = matrix[row - 1][column - 1] # bit left up 
+                            else:
+                                bit_lu = bit_u = -1
+                                
+                            if row + 1 < self.shape:
+                                bit_d = matrix[row + 1][column] # bit down           
+                                bit_ld = matrix[row + 1][column - 1] # bit down left
+                            else:
+                                bit_d = bit_ld = -1
+
+                        else:
+                            bit_l = bit_lu = bit_ld = -1
+
+                        if column + 1 < self.shape:
+                            bit_r = matrix[row][column + 1] # bit right
+                            if row - 1 > 0:
+                                bit_u = matrix[row - 1][column] # bit up
+                                bit_ru = matrix[row - 1][column + 1] # bit right up 
+                            else:
+                                bit_ru = bit_u = -1
+                                
+                            if row + 1 < self.shape:
+                                bit_d = matrix[row + 1][column] # bit down           
+                                bit_rd = matrix[row + 1][column + 1] # bit right down
+                            else:
+                                bit_d = bit_rd = -1
+
+                        else:
+                            bit_r = bit_ru = bit_rd = -1
+
+                    # Checking 2x2 area
+                    if bit_l != bit and bit != bit_r: # If there are no similar colors, there is no need to check
+                        continue
+
+                    if bit_l == bit and (bit_l == bit_lu == bit_u or bit_l == bit_ld == bit_d): # Left half
+                        penalties[1] += 3
+                    if bit_r == bit and (bit_r == bit_ru == bit_u or bit_r == bit_rd == bit_d): # Right half
+                        penalties[1] += 3
+
+                # EVALUATION CONDITION 2
+
+    
     def data_mask(self):
         # After encoding the data, eight masks must be applied to it and evaluated based on four conditions
         # The evaluation gives it a penalty score. The lowest penalty score wins.
@@ -625,9 +734,9 @@ class QRCode():
                     matrices[7][row][column] = 1 - matrices[7][row][column]
     
         for m in matrices:
-            m = evaluate(m)
+            m = self.evaluate(m)
 
-
+    #endregion
 
 
 qr = QRCode('HELLO WORLD', 'Alphanumeric', 1, 'L')
@@ -653,7 +762,8 @@ qr.place_eccodewords()
 qr.finder_pattern()
 qr.data_placement()
 qr.show_code()
-qr.data_mask()
+#qr.data_mask()
+qr.evaluate(qr.matrix)
 pprint.pprint(qr.matrix)
 
 # I've come up with three ways to avoid the occupied areas when adding the data to the QR Code
