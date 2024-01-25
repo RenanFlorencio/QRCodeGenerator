@@ -1,6 +1,6 @@
 from matplotlib import pyplot as plt
 import pprint
-from math import floor
+from math import floor, ceil, log2
 
 WHITE = 0
 BLACK = 1
@@ -75,7 +75,7 @@ MODE_INDICATOR_TABLE = {
     'Kanji': '1000'
 }
 
-EC_CODEWORDS = {
+EC_CODEWORDS = { # Number of EC Codewords
     '1-L': 7,
     '1-M': 10,
     '1-Q': 13,
@@ -86,6 +86,13 @@ EC_CODEWORDS = {
     '2-H': 28,
     '3-L': 15,
     '3-M': 26
+}
+
+EC_BITS = { # Bits used to create the format string
+    'L': 0b01,
+    'M': 0b00,
+    'Q': 0b11,
+    'H': 0b10
 }
 
 DATACODEWORDS_G1 = {
@@ -231,6 +238,7 @@ class QRCode():
         self.matrix = [] # Final matrix
         self.covered_area = []  # Area covered by mandatory patterns
                                 # start_row, start_column, width, height
+        self.mask_number = 0
         self.init_matrix()
 
 
@@ -724,6 +732,7 @@ class QRCode():
     def data_mask(self):
         # After encoding the data, eight masks must be applied to it and evaluated based on four conditions
         # The evaluation gives it a penalty score. The lowest penalty score wins.
+        # RETURNS THE MASK NUMBER and SETS THE BEST MATRIX TO SELF.MATRIX
 
         # Mask Number / If the formula below is true for a given row/column coordinate, switch the bit at that coordinate
         # 0	(row + column) mod 2 == 0
@@ -778,9 +787,34 @@ class QRCode():
 
         best_matrix = matrices[penalties.index(min(penalties))]
         self.matrix = best_matrix
-        return best_matrix
+        self.mask_number = penalties.index(min(penalties))
+        return self.mask_number
 
 
+    def format_string(self):
+        ec_bits = EC_BITS.get(self.ec)
+        mask_number = self.mask_number
+        format_bin = ((ec_bits << 3) + mask_number) << 10 # Concatenating the bits
+        format_s = format((ec_bits << 3) + mask_number, 'b')
+
+        generator = 0b10100110111
+
+        while(ceil(log2(format_bin)) >= 11):
+            
+            generator_padded = generator << (ceil(log2(format_bin)) - ceil(log2(generator)))
+            format_bin = format_bin ^ generator_padded
+
+        aux = format(format_bin, 'b')
+        aux = ('0' * (10 - len(aux))) + aux 
+        format_s = format_s + aux
+
+        format_s = format(int(format_s, base=2) ^ 0b101010000010010, 'b')          # XOR the result with the mask string
+        return format_s
+
+
+    def format_version(self):
+        format_s = self.format_string()
+        
 
     #endregion
 
@@ -807,10 +841,9 @@ qr.place_eccodewords()
 
 qr.finder_pattern()
 qr.data_placement()
-qr.show_code()
 qr.data_mask()
-qr.evaluate(qr.matrix)
-qr.show_code()
+qr.format_string()
+
 pprint.pprint(qr.matrix)
 
 # I've come up with three ways to avoid the occupied areas when adding the data to the QR Code
