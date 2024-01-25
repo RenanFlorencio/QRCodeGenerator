@@ -577,6 +577,7 @@ class QRCode():
 
         row_counter = 0
         column_counter = 0
+        black_counter = 0
         for row in range(self.shape):
             for column in range(self.shape):
 
@@ -680,8 +681,46 @@ class QRCode():
                         penalties[1] += 3
 
                 # EVALUATION CONDITION 2
+                # This evaluation looks for patterns of BWBBBWBWWWW or WWWWBWBBBWB in rows or columns    
+                    
+                if row <= self.shape - 11 and column <= self.shape - 11:
+                    
+                    for i in range(2):
+                        row_act = row
+                        column_act = column
+                        if i == 1: # Checking for the columns by inverting the rows
+                            row_act = column
+                            column_act = row
 
-    
+                    bit = matrix[row_act][column_act]
+                    # Looking for the pattern
+                    if bit == BLACK:
+                        if matrix[row_act][column_act + 1] == matrix[row_act][column_act + 5] == matrix[row_act][column_act + 7] == matrix[row_act][column_act + 8] == matrix[row_act][column_act + 9] == matrix[row_act][column_act + 10] == WHITE and matrix[row_act][column_act + 2] == matrix[row_act][column_act + 3] == matrix[row_act][column_act + 4] == matrix[row_act][column_act + 6] == BLACK:
+                            
+                            penalties[2] += 40
+
+                    else:
+                        if matrix[row_act][column_act + 1] == matrix[row_act][column_act + 2] == matrix[row_act][column_act + 3] == matrix[row_act][column_act + 5] == matrix[row_act][column_act + 9] == WHITE and matrix[row_act][column_act + 4] == matrix[row_act][column_act + 6] == matrix[row_act][column_act + 7] == matrix[row_act][column_act + 8] == matrix[row_act][column_act + 10] == BLACK:
+
+                            penalties[2] += 40
+
+                # EVALUATION CONDICTION 3
+                # This condition is based on the ratio of dark modules and white modules
+                if matrix[row][column] == BLACK: black_counter += 1
+        
+        total_modules = self.shape ** 2
+        black_perc = (black_counter / total_modules) * 100
+        val_1 = abs((black_perc - (black_perc % 5)) - 50) / 5 # 50 - 'previous multiple of 50' / 5
+        val_2 = abs((black_perc + (5 - black_perc % 5)) - 50) / 5 # 50 - 'next multiple of 50' / 5
+
+        if val_1 < val_2:
+            penalties[3] = int(val_1 * 10)
+        else:
+            penalties[3] = int(val_2 * 10)
+
+        return sum(penalties)
+
+
     def data_mask(self):
         # After encoding the data, eight masks must be applied to it and evaluated based on four conditions
         # The evaluation gives it a penalty score. The lowest penalty score wins.
@@ -733,8 +772,15 @@ class QRCode():
                 if (((row + column) % 2) + ((row * column) % 3) ) % 2 == 0: # Data mask 7
                     matrices[7][row][column] = 1 - matrices[7][row][column]
     
-        for m in matrices:
-            m = self.evaluate(m)
+        penalties = []
+        for i in range(8):
+            penalties.append(self.evaluate(matrices[i]))
+
+        best_matrix = matrices[penalties.index(min(penalties))]
+        self.matrix = best_matrix
+        return best_matrix
+
+
 
     #endregion
 
@@ -762,8 +808,9 @@ qr.place_eccodewords()
 qr.finder_pattern()
 qr.data_placement()
 qr.show_code()
-#qr.data_mask()
+qr.data_mask()
 qr.evaluate(qr.matrix)
+qr.show_code()
 pprint.pprint(qr.matrix)
 
 # I've come up with three ways to avoid the occupied areas when adding the data to the QR Code
