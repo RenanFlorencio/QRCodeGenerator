@@ -225,13 +225,13 @@ class QRCode():
         self.datalen = len(data) # Lenght of data
         self.shape = VERSIONS_DIMENSIONS[self.version] # Dimension of the QR Code
         self.string = '' # Binary string representing data and error correction
-        self.ec = ec_level # Level of error correction (L, M, H)
+        self.ec = ec_level # Level of error correction (L, M, Q, H)
         self.mode = mode # QR Code mode (Alphanumeric, Numeric, ...)
         self.n_eccodewords = EC_CODEWORDS.get(self.id) # Number of EC codewords
         self.blocksG1 = BLOCKS_G1.get(self.id) # Number of blocks in group 1
         self.datacodeG1 = DATACODEWORDS_G1.get(self.id) # Number of data codewords for each block
         self.blocksG2 = BLOCKS_G2.get(self.id) # Number of blocks in group 2
-        self.totalbits = TOTALBITS_TABLE.get(f'{version}-{ec_level}') # Total bits necessary
+        self.totalbits = TOTALBITS_TABLE.get(self.id) # Total bits necessary
         self.g1 = [] # Codewords of G1 group
         self.g2 = [] # Codewords of G2 group
         self.ec_codewords = [] # Error correction codewords
@@ -255,7 +255,7 @@ class QRCode():
 
     def fill_zeros (self, string, amount):
         ## Fills the given string with ´amount´ zeros before it.
-        new_s = '0' * (amount - self.datalen) + string
+        new_s = '0' * (amount - len(string)) + string
         return new_s
 
     def set_mode(self):
@@ -362,8 +362,15 @@ class QRCode():
 
     def get_eccodewords(self):
         # Returns the error correction codewords as integers
+        
         message = self.message_poly()
         generator = self.generator_poly()
+
+        #DEBBUGING
+        #message = [17, 236, 17, 236, 17, 236, 64, 67, 77, 220, 114, 209, 120, 11, 91, 32]
+        # for _ in range(len(message)):
+        #     message[_] = ANTI_GF[message[_] - 1]
+        # generator = [45, 32, 94, 64, 70, 118, 61, 46, 67, 251, 0]
 
         n_messageterm = len(message) # This is the original amount of terms
         # The firts step is to multiply the message polynomial by x^n where n is the number of error correction
@@ -414,14 +421,7 @@ class QRCode():
             # Now it is important to get the next term to be multiplied
             # The message should be the result
             message = aux.copy()
-            message[len(message) - 1 -i] = ''
-
-            # If there are no more iterations, get out of the function
-            if i != n_messageterm - 1:
-                aux.clear()
-            else:
-                # Skipping unnecessary calculations
-                break
+            message[len(message) - 1 - i] = ''
 
             # Turning the message back to integer            
             for k in range(len(message)):
@@ -434,12 +434,30 @@ class QRCode():
                 generator[k] = generator[k + 1]
             generator[len(generator) - 1] = ''
 
+        
+            # If there are no more iterations, get out of the function
+            if i != n_messageterm - 1:
+                aux.clear()
+
 
         # The error correction codewords are the remainder terms
         # self.ec_codewords = aux[len(aux) - 1 - self.n_eccodewords: len(aux) - 1]
-        eccodewords = message[:self.n_eccodewords]
+        
+        index = 0 # Index where the remainder begins
+        for k in range(len(message)):
+            if message[k] == '':
+                index += 1
+            else:
+                break
+
+        eccodewords = message[index:self.n_eccodewords]
+
+        for i in range(len(eccodewords) // 2): # Reversing the list and taking it back to integers
+            eccodewords[i],  eccodewords[-i - 1] = GF(2 ** eccodewords[-i - 1]), GF(2 ** eccodewords[i])
+ 
         self.ec_codewords = eccodewords
         return eccodewords
+
 
     def place_eccodewords(self):
         # This function simply adds the ec codewords to the qr code string
@@ -780,10 +798,15 @@ class QRCode():
                     matrices[6][row][column] = 1 - matrices[6][row][column]
                 if (((row + column) % 2) + ((row * column) % 3) ) % 2 == 0: # Data mask 7
                     matrices[7][row][column] = 1 - matrices[7][row][column]
-    
+
+        for m in matrices:
+            show_code(m) 
+
+
         penalties = []
         for i in range(8):
             penalties.append(self.evaluate(matrices[i]))
+
 
         best_matrix = matrices[penalties.index(min(penalties))]
         self.matrix = best_matrix
@@ -814,8 +837,59 @@ class QRCode():
 
     def format_version(self):
         format_s = self.format_string()
-        
+        positions = {   # 0 are the most significant bytes positions and 14 the least significant one 
+            0: [(8, 0), (self.shape - 1, 8)],
+            1: [(8, 1), (self.shape - 2, 8)],
+            2: [(8, 2), (self.shape - 3, 8)],
+            3: [(8, 3), (self.shape - 4, 8)],
+            4: [(8, 4), (self.shape - 5, 8)],
+            5: [(8, 5), (self.shape - 6, 8)],
+            6: [(8, 7), (self.shape - 7, 8)],
+            7: [(8, 8), (8, self.shape - 8)],
+            8: [(7, 8), (8, self.shape - 7)],
+            9: [(5, 8), (8, self.shape - 6)],
+            10: [(4, 8), (8, self.shape - 5)],
+            11: [(3, 8), (8, self.shape - 4)],
+            12: [(2, 8), (8, self.shape - 3)],
+            13: [(1, 8), (8, self.shape - 2)],
+            14: [(0, 8), (8, self.shape - 1)]
+            }
 
+        for i in range(len(format_s)):
+
+            self.matrix[positions[i][0][0]][positions[i][0][1]] = int(format_s[i])
+            self.matrix[positions[i][1][0]][positions[i][1][1]] = int(format_s[i])
+
+
+    def quiet_zone(self):
+        # Adds a required 4-module-wide area of white modules to the matrix
+        final_matrix = []
+        white_row = []
+        for _ in range(self.shape + 8):
+            white_row.append(WHITE)
+
+        # 4 rows top padding
+        for _ in range(4):
+            final_matrix.append(white_row)
+
+        # Left and right padding
+        for i in range(self.shape):
+            row = []
+            for j in range(self.shape + 8):
+                if j < 4 or j >= self.shape + 4:
+                    row.append(WHITE)
+                else:
+                    row.append(self.matrix[i][j - 4])
+            
+            final_matrix.append(row)
+
+        # 4 rows bottom padding
+        for _ in range(4):
+            final_matrix.append(white_row)
+
+        self.matrix = final_matrix
+        return final_matrix
+    
     #endregion
 
 
@@ -832,6 +906,7 @@ qr.data_codewords()
 ## ERROR CODEWORDS
 qr.get_eccodewords()
 qr.place_eccodewords()
+
 # -> For larger QR Codes (those which have more than one block) it is necessary to interleave the data and the
 #   error correction codewords. For now, this step is going to be skipped
 
@@ -842,9 +917,10 @@ qr.place_eccodewords()
 qr.finder_pattern()
 qr.data_placement()
 qr.data_mask()
-qr.format_string()
-
-pprint.pprint(qr.matrix)
+qr.format_version()
+qr.quiet_zone()
+print(qr.mask_number)
+qr.show_code()
 
 # I've come up with three ways to avoid the occupied areas when adding the data to the QR Code
 # - The first one is to keep an array with the covered areas (start, height, width), but that would make it necessary
