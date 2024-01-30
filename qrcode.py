@@ -246,7 +246,7 @@ class QRCode():
     # Initializes a gray matrix
         line = []
         for _ in range(self.shape):
-            line.append(BLACK)
+            line.append(GRAY)
         for _ in range(self.shape):
             self.matrix.append(line.copy())
 
@@ -292,6 +292,7 @@ class QRCode():
     def terminator(self):
         ## Adds terminator bits to string
 
+        # TODO Add the other error correction levels
         if self.version == 1 and self.ec == 'L':
             
             bits = len(self.string)
@@ -364,10 +365,13 @@ class QRCode():
         # Returns the error correction codewords as integers
         
         message = self.message_poly()
+        for i in range(len(message)):
+            message[i] = ANTI_GF[message[i] - 1]
         generator = self.generator_poly()
 
         #DEBBUGING
-        #message = [17, 236, 17, 236, 17, 236, 64, 67, 77, 220, 114, 209, 120, 11, 91, 32]
+        # self.n_eccodewords = 10
+        # message = [17, 236, 17, 236, 17, 236, 64, 67, 77, 220, 114, 209, 120, 11, 91, 32]
         # for _ in range(len(message)):
         #     message[_] = ANTI_GF[message[_] - 1]
         # generator = [45, 32, 94, 64, 70, 118, 61, 46, 67, 251, 0]
@@ -439,10 +443,7 @@ class QRCode():
             if i != n_messageterm - 1:
                 aux.clear()
 
-
-        # The error correction codewords are the remainder terms
-        # self.ec_codewords = aux[len(aux) - 1 - self.n_eccodewords: len(aux) - 1]
-        
+        # The error correction codewords are the remainder terms        
         index = 0 # Index where the remainder begins
         for k in range(len(message)):
             if message[k] == '':
@@ -474,8 +475,11 @@ class QRCode():
     # To keep things easier to debug, I've implemented them separetely
 
     def show_code(self):
+        # plt.ion()
         plt.imshow(self.matrix, interpolation='nearest', cmap='gray_r', vmin=0, vmax=1)
         plt.show()
+        # plt.pause(0.7)
+        # plt.close("all") 
 
 
     def finder_pattern(self):
@@ -544,7 +548,7 @@ class QRCode():
             pass
 
         # DARK MODULE
-        self.matrix[(4 * self.version) + 9][8] # This goes into the same region as the version information
+        self.matrix[(4 * self.version) + 9][8] = BLACK # This goes into the same region as the version information
 
 
     def isCovered(self, row, column):
@@ -559,7 +563,7 @@ class QRCode():
 
         counter = 0 # This is used to check whether the pattern goes up or down
                     # If the counter is even, the pattern goes up, if the counter is odd, the pattern goes down
-        data_int = int(self.string, 2)
+        data_int = int((self.string[::-1]), 2)
         column = self.shape - 1
 
         while column >= 0:
@@ -578,9 +582,11 @@ class QRCode():
                     if not self.isCovered(row, column):
                         self.matrix[row][column] = data_int & 0b1
                         data_int = data_int >> 1
+                    if not self.isCovered(row, column - 1):
                         self.matrix[row][column - 1] = data_int & 0b1
                         data_int = data_int >> 1
-            
+
+                                
             else: # Going down
                 for row in range(self.shape):
 
@@ -590,11 +596,13 @@ class QRCode():
                     if not self.isCovered(row, column):
                         self.matrix[row][column] = data_int & 0b1
                         data_int = data_int >> 1
+                    if not self.isCovered(row, column - 1):
                         self.matrix[row][column - 1] = data_int & 0b1
                         data_int = data_int >> 1
 
             column -= 2 # Generally, skipping two columns
             counter += 1
+            
 
 
     def evaluate(self, matrix):
@@ -799,9 +807,8 @@ class QRCode():
                 if (((row + column) % 2) + ((row * column) % 3) ) % 2 == 0: # Data mask 7
                     matrices[7][row][column] = 1 - matrices[7][row][column]
 
-        for m in matrices:
-            show_code(m) 
-
+        # for m in matrices:
+        #     show_code(m)
 
         penalties = []
         for i in range(8):
@@ -907,6 +914,7 @@ qr.data_codewords()
 qr.get_eccodewords()
 qr.place_eccodewords()
 
+# TODO Add remainder bits
 # -> For larger QR Codes (those which have more than one block) it is necessary to interleave the data and the
 #   error correction codewords. For now, this step is going to be skipped
 
